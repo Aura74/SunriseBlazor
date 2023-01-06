@@ -1,0 +1,185 @@
+﻿@page "/"
+
+@inject SunriseBlazor.Services.SunriseRepo _repo
+@inject IJSRuntime JsRuntime
+
+@*<div class="container"></div>*@
+<div class="hlineDown"></div>
+<h1 class="rubriken" style="text-align:center">Soltider</h1>
+<h2 class="H2StartPage" style="text-align:center">Hämta solens tider</h2>
+
+<div class="hlineUp"></div>
+
+@*<p style="text-align:center">Här kan du som användare se de senast lagrade .... mer text kommer vid senare tillfälle</p>
+*@
+
+
+<div class="latestDate">
+    @if (!isLoading)
+    {
+        <h3 class="latestDayH3">Datum</h3>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <p><em>Hämtar fler dagar för @dayDisplayName: @dayCurrent av @dayCount..</em></p>
+            <img src="images/spin.gif" width="50px">
+        </div>
+    }
+
+    else {
+        @if (latestDates.Count > 0)
+        {
+            <table class="table table-striped">
+                <thead class="table-light">
+                    <tr>
+                        <th>Plats</th>
+                        <th>Senaste datum</th>
+                        <th>Antal dagar kvar</th>
+                        <th>Hämta mer</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var loc in latestDates)
+                    {
+                        <tr>
+                            <td><button class="btn btn-outline-danger bi bi-trash" @onclick="() => DeleteCity(loc.CityName)"></button> &nbsp; @loc.CityName</td>
+                            <td>@loc.Datum.ToShortDateString()</td>
+
+                            <td>
+                                @if (CalcDays(loc.Datum) < 30)
+                                {
+                                    if (CalcDays(loc.Datum) <= 0)
+                                    {
+                                        <i class="bi bi-calendar-x text-danger" style="font-size: 1.5em;"></i>
+                                        <span class="text-danger">Slut på dagar!</span>
+                                    }
+
+                                    else if (CalcDays(loc.Datum) == 1)
+                                    {
+                                        <i class="bi bi-calendar-x text-danger" style="font-size: 1.5em;"></i>
+                                        <span class="text-danger">1 dag</span>
+                                    }
+
+                                    else
+                                    {
+                                        <i class="bi bi-calendar-x text-danger" style="font-size: 1.5em;"></i>
+                                        <span class="text-danger">@CalcDays(loc.Datum) dagar</span>
+                                    }
+                                }
+
+                                else {
+                                    <i class="bi bi-calendar-check text-success" style="font-size: 1.5em;"></i>
+                                    <span class="text-success">@CalcDays(loc.Datum) dagar</span>
+                                }
+                            </td>
+
+                            <td><button class="btn btn-outline-success bi bi-calendar-plus" @onclick="() => FetchDays(loc, loc.Datum.AddDays(30), false)"> 30 dagar</button>
+                                <button class="btn btn-outline-success bi bi-calendar-plus" @onclick="() => FetchDays(loc, loc.Datum.AddYears(1), true)"> 1 år</button>
+@*                                <button class="btn btn-outline-success bi bi-calendar-plus" @onclick="() => FetchDays(loc, loc.Datum.AddDays(3))"> 3 Testdagar</button>
+*@                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else {
+            <p>Det finns inga lagrade datum just nu.</p>
+        }
+    }
+
+</div>
+
+<footer>
+    <div class="hlineUpAndDownFooter"></div>
+    <h4 class="H4StartPageFooter">Kontakta ACTOR</h4>
+    <p>Reception och växel: 026-65 69 00</p>
+    <p>E-post: info@actor.se</p>
+</footer>
+
+<div class="StartPageImage"></div>
+
+@code {
+    private List<SunriseItem> latestDates = new();
+    private List<SunriseItem> addSunrises = new();
+    bool isLoading = false;
+    int dayCurrent = 0;
+    int dayCount = 0;
+    string dayDisplayName = String.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Hämta distinct orderbydescending lista per location
+        latestDates = await _repo.GetLatestDatesAsync();
+    }
+
+    async void DeleteCity(string city) {
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Är du säker på att du vill ta bort alla sparade dagar för {city}?");
+        if (confirmed) {
+            await _repo.RemoveAllForLocationAsync(city);
+            latestDates = await _repo.GetLatestDatesAsync();
+            StateHasChanged();
+        }
+    }
+
+    async void FetchDays(SunriseItem item, DateTime fetchDatumEnd, bool isYears)
+    {
+        // Gör en copy för att undvika att referensen uppdateras
+        var fetchDatumStart = DateTime.Parse(item.Datum.ToString());
+
+        // Om dagens datum är nyare än senaste lagrade för staden så hämta från i dag istället
+        fetchDatumStart = fetchDatumStart.AddDays(1);
+
+        if (fetchDatumStart < DateTime.Now)
+        {
+            fetchDatumStart = DateTime.Now;
+
+            if (isYears)
+                fetchDatumEnd = DateTime.Now.AddYears(1);
+            else
+                fetchDatumEnd = DateTime.Now.AddDays(30);
+        }
+
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Vill du hämta datum från {fetchDatumStart.ToShortDateString()} till {fetchDatumEnd.ToShortDateString()} för {item.CityName}?");
+
+        if (confirmed)
+        {
+            isLoading = true;
+            dayDisplayName = item.CityName;
+
+            dayCount = (int)fetchDatumEnd.Subtract(fetchDatumStart).TotalDays + 1;
+            dayCurrent = 0;
+            City city = await _repo.GetCityLocationAsync(item.CityName);
+            DateOnly current = DateOnly.Parse(fetchDatumStart.ToShortDateString());
+
+            // Loopa igenom och hämta varje dag i spannet och stoppa i en temporär lista
+            for (int i = 0; i < dayCount; i++)
+            {
+                dayCurrent++;
+                StateHasChanged();
+                var tmp = await _repo.GetDayFromApiAsync(current.ToString(), city);
+                addSunrises.Add(tmp);
+
+                current = current.AddDays(1);
+            }
+
+            // Stoppa in genererade listan i databasen
+            addSunrises = await _repo.PutSunrisesAsync(addSunrises);
+            addSunrises.Clear();
+
+            isLoading = false;
+            dayCount = 0;
+
+            // Uppdatera senaste datumen för visning på sidan
+            latestDates = await _repo.GetLatestDatesAsync();
+            StateHasChanged();
+        }
+    }
+
+    int CalcDays(DateTime end)
+    {
+        return (int)end.Subtract(DateTime.Now).TotalDays + 1;
+    }
+}

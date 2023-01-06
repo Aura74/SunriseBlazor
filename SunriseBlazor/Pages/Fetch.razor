@@ -1,0 +1,193 @@
+﻿@page "/Fetch"
+<PageTitle>Sunrise Sunset</PageTitle>
+
+@inject SunriseBlazor.Services.SunriseRepo _repo
+
+<div class="runtHelaDivenOmrodet container">
+    <div class="runtRubrik">
+        <div class="hlineDown"></div>
+        <h1 class="rubriken" style="text-align:center">Solens upp- och nedgång</h1>
+        <h2 id="underRubrik" style="text-align:center !important">Hämta data för @sunrise.Location.</h2>
+
+        <div class="hlineUp"></div>
+
+            <EditForm Model="sunrise" OnSubmit="FetchSunriseApiData">
+                 <div id="divForLongLat" class="row">
+                    <label class="col " id="labelForLatitude">Latitud</label>
+                    <span class="col" id="inputTextForLatitude">@sunrise.Latitude</span>
+
+                    <label class="col" id="labelForLongitude">Longitud</label>
+                    <span class="col" id="inputTextForLongitude">@sunrise.Longitude</span>
+
+                    <select class="col" id="labelStad" value=@selection @onchange=OnSelectionChanged>
+                        @foreach (var city in cities)
+                        {
+                            <option value=@city>@city</option>
+                        }
+                    </select>
+                </div>
+
+                <div id="divForStartStopDate" class="row" style = "margin-top: 0px">
+                    <label class="col" id="labelForStartDate">Start</label>
+                        <InputDate id="inputDatePickerForStartDate" class="col" @bind-Value="sunrise.start"></InputDate>
+
+                    <label class="col" id="labelForStopDate">Stopp</label>
+                        <InputDate id="inputDatePickerForStopDate" class="col" @bind-Value="sunrise.end"></InputDate>
+
+                    <button class="buttonFetch col">Sök <i class="bi bi-search"></i></button>
+                </div>
+
+                <div class="hlineDown"></div>
+            </EditForm>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center">
+        <p><em>Hämtar resultat för dag @dayCurrent av @dayCount..</em></p>
+        <img src="images/spin.gif" width="50px">
+    </div>
+}
+
+@if (sunrises.Count > 0 && !isLoading)
+{
+    <table class="table table-striped">
+        <thead class="table-light">
+            <tr>
+                <th>Datum</th>
+                <th>Soluppgång</th>
+                <th>Solupp UTC</th>
+                <th>Solnedgång</th>
+                <th>Soldned UTC</th>
+                <th>Latitud</th>
+                <th>Longitud</th>
+                <th>Stad</th>
+                <th>S/V-tid</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var sunrise in sunrises)
+            {
+                <tr>
+                    <td>@sunrise.Datum.ToShortDateString()</td>
+                    <td>@sunrise.Sunrise</td>
+                    <td>@sunrise.OriginalSunrise</td>
+                    <td>@sunrise.Sunset</td>
+                    <td>@sunrise.OriginalSunset</td>
+                    <td>@sunrise.CityLatitude</td>
+                    <td>@sunrise.CityLongitude</td>
+                    <td>@sunrise.CityName</td>
+                    <td>@if (!sunrise.SummerWinter)
+                        {
+                            <span>Vinter</span>
+                        }
+                        else { <span>Sommar</span> } </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    List<SunriseItem> sunrises = new();
+    SunriseDTO sunrise { get; set; } = new();
+    bool isLoading = false;
+    City city = new();
+    List<string> cities = new();
+    string selection = "Gävle"; // Default vald
+
+    double latitude;
+    double longitude;
+    string location = String.Empty;
+    int dayCount = 0;
+    int dayCurrent = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        city = await _repo.GetCityLocationAsync(selection);
+        cities = await _repo.GetAllCitiesAsync();
+
+        // Sortera svenska bokstäver på ett korrekt sätt
+        cities.Sort(delegate (string item1, string item2) { return String.Compare(item1, item2, false, new CultureInfo("sv-SE")); });
+
+        // Placeholder values
+        await Task.Run(() =>
+        {
+            sunrise.start = DateTime.Now;
+            sunrise.end = DateTime.Now.AddDays(3);
+            sunrise.Latitude = city.Latitude.ToString();
+            sunrise.Longitude = city.Longitude.ToString();
+            sunrise.Location = city.Name;
+        });
+    }
+
+    private async void OnSelectionChanged(ChangeEventArgs e)
+    {
+        // Val i inputbox har ändrats, hämta longitud och latitud för den nya staden
+        selection = e.Value.ToString();
+        var selectedCity = await _repo.GetCityLocationAsync(selection);
+
+        sunrise.Latitude = selectedCity.Latitude.ToString();
+        sunrise.Longitude = selectedCity.Longitude.ToString();
+        sunrise.Location = selectedCity.Name;
+
+        StateHasChanged();
+    }
+
+    // Formatera om inputfält och hämta data från API
+    private async void FetchSunriseApiData()
+    {
+        // Ingen idé att hämta passerade datum
+        if (sunrise.start < DateTime.Now)
+            sunrise.start = DateTime.Now;
+
+        // Kolla att slutdatum inte ligger före startdatum
+        if (sunrise.end < sunrise.start)
+            sunrise.end = DateTime.Now;
+
+        dayCount = (int)sunrise.end.Subtract(sunrise.start).TotalDays + 1;
+        dayCurrent = 0;
+        sunrises.Clear();
+
+        city = await _repo.GetCityLocationAsync(sunrise.Location);
+
+        isLoading = true;
+
+        // Fulhack för att lösa kulturkrock där vissa länder kör komma istället för punkt
+        sunrise.Latitude.Replace(',', '.');
+        sunrise.Longitude.Replace(',', '.');
+        latitude = double.Parse(sunrise.Latitude, CultureInfo.InvariantCulture);
+        longitude = double.Parse(sunrise.Longitude, CultureInfo.InvariantCulture);
+
+        // Runda av för "close enough" värden
+        latitude = Math.Round(latitude, 1, MidpointRounding.AwayFromZero);
+        longitude = Math.Round(longitude, 1, MidpointRounding.AwayFromZero);
+
+        // Strängformattering för platsnamn
+        location = location.ToLower();
+        location = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(sunrise.Location.ToLower());
+
+        // Räknare för nuvarande steg
+        DateOnly current = new();
+        current = DateOnly.Parse(sunrise.start.ToShortDateString());
+
+        for (int i = 0; i < dayCount; i++)
+        {
+            dayCurrent++;
+            StateHasChanged();
+            var tmp = await _repo.GetDayFromApiAsync(current.ToString(), city);
+            //tmp.City = location;
+            sunrises.Add(tmp);
+
+            current = current.AddDays(1);
+        }
+
+        // Stoppa in i databas och uppdatera bindings med resultat
+        sunrises = await _repo.PutSunrisesAsync(sunrises);
+
+        isLoading = false;
+        dayCount = 0;
+        StateHasChanged();
+    }
+}

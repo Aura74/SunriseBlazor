@@ -1,0 +1,19 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>SunriseBlazor</PageTitle>
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4" >
+            Data provided by <a href="https://sunrise-sunset.org/api">Sunrise-Sunset API</a>
+        </div>
+
+        <article class="content px-4" >
+            @Body
+        </article>
+    </main>
+</div>

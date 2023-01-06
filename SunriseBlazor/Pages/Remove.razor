@@ -1,0 +1,112 @@
+﻿@page "/Remove"
+<PageTitle>Ta bort ort</PageTitle>
+@inject SunriseBlazor.Services.SunriseRepo _repo
+@inject IJSRuntime JsRuntime
+
+<div class="hlineDown"></div>
+
+<h1 class="rubriken" style="text-align:center">Ta bort stad</h1>
+<h2 id="underRubrik" style="text-align:center !important">Välj stad för radering</h2>
+<div class="hlineUp"></div>
+
+<div class="row">
+    <div class="col">
+        <label id="labelForLatitudeAddPlace">Latitud:</label>
+        <span id="inputTextForLatitudeAddPlace">@latitude</span>
+    </div>
+
+    <div class="col">
+        <label id="labelForLongitudeAddPlace">Longitud:</label>
+        <span id="inputTextForLongitudeAddPlace">@longitude</span>
+    </div>
+    
+    <div class="col">
+        <label id="labelStadRemoveCity">Stad:</label>
+        <select class="col" value=@selection @onchange=OnSelectionChanged>
+            @foreach (var city in cities)
+            {
+                <option value=@city>@city</option>
+            }
+        </select>
+    </div>
+
+</div>
+
+<div class="d-grid gap-2 marginBottom">
+    @*<button id="ButtonTaBortStad " class="btn btn-outline-danger" @onclick="() => DeleteCity()"><i class="bi bi-exclamation-triangle"></i> Ta bort <i class="bi bi-exclamation-triangle"></i></button>
+    *@
+    <button id="ButtonTaBortStad " class="custom-btn btn-11" @onclick="() => DeleteCity()"><i class="bi bi-exclamation-triangle" /> Ta bort <i class="bi bi-exclamation-triangle" /><div class="dot"></div></button>
+    
+    </div>
+
+
+
+
+<div>
+    @if(!String.IsNullOrEmpty(message))
+    {
+        <div class="alert alert-danger marginBottom" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> @message <i class="bi bi-exclamation-triangle"></i>
+        </div>
+    }
+</div>
+
+@code {
+    List<string> cities = new();
+    string selection = ""; // Default vald
+    string message = String.Empty;
+    string longitude = String.Empty;
+    string latitude = String.Empty;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        cities = await _repo.GetAllCitiesAsync();
+        cities.Sort(delegate (string item1, string item2) { return String.Compare(item1, item2, false, new CultureInfo("sv-SE")); });
+        selection = cities.FirstOrDefault();
+
+        var selectedCity = await _repo.GetCityLocationAsync(selection);
+
+        latitude = selectedCity.Latitude.ToString();
+        longitude = selectedCity.Longitude.ToString();
+
+        StateHasChanged();
+    }
+
+    private async void OnSelectionChanged(ChangeEventArgs e)
+    {
+        // Val i inputbox har ändrats, hämta longitud och latitud för den nya staden
+        selection = e.Value.ToString();
+        var selectedCity = await _repo.GetCityLocationAsync(selection);
+
+        latitude = selectedCity.Latitude.ToString();
+        longitude = selectedCity.Longitude.ToString();
+
+        StateHasChanged();
+    }
+
+    private async void DeleteCity() {
+        string selected = selection;
+        bool confirmed = await JsRuntime.InvokeAsync<bool>("confirm", $"Är du säker på att du vill ta bort {selection}? Detta kommer även ta bort alla sparade datum för platsen.");
+        if (confirmed)
+        {
+            message = $"Tar bort {selected}";
+            await _repo.RemoveAllForLocationAsync(selection);
+            await _repo.DeleteLocationAsync(selection);
+            cities = await _repo.GetAllCitiesAsync();
+
+            // Sortera svenska bokstäver på ett korrekt sätt
+            cities.Sort(delegate (string item1, string item2) { return String.Compare(item1, item2, false, new CultureInfo("sv-SE")); });
+
+            // Uppdatera listan och sätt nya placeholders
+            selection = cities.FirstOrDefault();
+            var selectedCity = await _repo.GetCityLocationAsync(selection);
+            latitude = selectedCity.Latitude.ToString();
+            longitude = selectedCity.Longitude.ToString();
+
+            message = $"Tog bort {selected}.";
+
+            StateHasChanged();
+        }
+    }
+}

@@ -1,0 +1,178 @@
+﻿@page "/Add"
+<PageTitle>Lägg till en plats</PageTitle>
+@inject SunriseBlazor.Services.SunriseRepo _repo
+
+<div class="hlineDown"></div>
+
+<h1 class="rubriken" style="text-align:center">Lägg till en plats</h1>
+<h2 id="underRubrik" style="text-align:center!important">Skriv i ortens namn</h2>
+<div class="hlineUp"></div>
+
+<div>
+	<EditForm Model="add">
+		<div class="row">
+			<div class="col">
+				<label id="labelForLatitudeAddPlace">Latitud:</label>
+				<span id="inputTextForLatitudeAddPlace">@add.Latitude</span>
+			</div>
+
+			<div class="col">
+				<label id="labelForLongitudeAddPlace">Longitud:</label>
+				<span id="inputTextForLongitudeAddPlace">@add.Longitude</span>
+			</div>
+		
+			<div class="col">
+				<label id="labelStadAddPlace">Stad:</label>
+				<input id="inputStadAdd" @bind-value="add.Name" />
+			</div>
+        </div>
+
+		@*<button id="ButtonHamtaInformation" class="btn btn-outline-primary" @onclick="() => FetchData()"><i class="bi bi-cloud-download"></i> Hämta information</button>*@
+
+		<button class="custom-btn btn-12" @onclick="() => FetchData()"><span><i class="bi bi-cloud-download"></i> Klicka här nu</span><span><i class="bi bi-cloud-download"></i> Hämta information</span></button>
+        @if (displaySave)
+		{
+			@*<button id="ButtonSparaTillDataBas" class="btn btn-outline-success" @onclick="() => AddCity()"><i class="bi bi-plus-lg"></i> Spara till databas</button>
+			*@
+			<button @onclick="() => AddCity()" class="custom-btn btn-7"><span><i class="bi bi-plus-lg"></i> Spara till databasen</span></button>
+		}
+		
+        
+
+
+
+   
+    
+		
+
+    </EditForm>
+
+	<hr />
+
+	@if (added) {
+		@*<p>Lade till @name i databasen.</p>*@
+	    <div class="alert alert-success" role="alert">
+			Lade till @name i databasen! <i class="bi bi-hand-thumbs-up"></i>
+        </div>
+	}
+	else {
+		@if (displayInfo) {
+		    <div class="alert alert-success" role="alert">
+				@message
+            </div>
+		    @*<p>@message</p>*@
+		}
+	}
+	
+</div>
+
+@code {
+	AddDTO add = new();
+	private double latitude;
+	private double longitude;
+	private string name = String.Empty;
+	string message = String.Empty;
+	bool displayInfo = false;
+	bool added = false;
+	bool displaySave = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await Task.Run(() =>
+		{
+			// Placeholdervärden
+			add.Latitude = "0.0";
+			add.Longitude = "0.0";
+			add.Name = "";
+		});
+	}
+
+	// Spara till databas
+	async void AddCity() {
+		added = false;
+		displayInfo = false;
+
+		if (String.IsNullOrEmpty(add.Name))
+		{
+			message = "Platsnamn måste fyllas i.";
+			displayInfo = true;
+			return;
+		}
+
+		// Fulhack för att lösa kulturkrock där vissa länder kör komma istället för punkt
+		add.Latitude.Replace(',', '.');
+		add.Longitude.Replace(',', '.');
+
+		if (!double.TryParse(add.Latitude, out latitude))
+		{
+			message = "Latitud kunde inte tolkas.";
+			displayInfo = true;
+		}
+
+		if (!double.TryParse(add.Longitude, out longitude))
+		{
+			message = "Longitud kunde inte tolkas.";
+			displayInfo = true;
+		}
+
+		// Runda av för "close enough" värden
+		latitude = Math.Round(latitude, 1, MidpointRounding.AwayFromZero);
+		longitude = Math.Round(longitude, 1, MidpointRounding.AwayFromZero);
+
+		// Strängformatering för platsnamn
+		name = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(add.Name.ToLower());
+
+		// True = Lade till ny plats, false = den platsen(s) namn existerade redan
+		added = await _repo.AddLocationAsync(name, longitude, latitude);
+
+		if (!added)
+		{
+			message = $"Kunde inte lägga till {name} i databasen för den existerar redan.";
+		}
+
+		else {
+			message = $"{name} sparades till databasen.";
+			displaySave = false;
+		}
+
+		displayInfo = true;
+		StateHasChanged();
+	}
+
+	// Hämta lat/long API data för angivet namn
+	async void FetchData() {
+		displayInfo = true; 
+		add.Name = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(add.Name.ToLower());
+
+		if (String.IsNullOrEmpty(add.Name))
+		{
+			message = "Textrutan får inte lämnas blank.";
+			StateHasChanged();
+			return;
+		}
+
+		message = $"Försöker hämta data för {add.Name}.";
+		StateHasChanged();
+
+		var city = await _repo.GetLocationFromApiAsync(add.Name);
+
+		if (city is not null)
+		{
+			add.Longitude = city.Longitude.ToString();
+			add.Latitude = city.Latitude.ToString();
+			add.Name = city.Name;
+
+			message = $"Hämtade information för {add.Name}.";
+			displayInfo = true;
+			displaySave = true;
+
+			// Uppdatera display
+			StateHasChanged();
+		}
+
+		else {
+			message = $"Kunde inte hämta data för {add.Name}.";
+			StateHasChanged();
+		}
+	}
+}

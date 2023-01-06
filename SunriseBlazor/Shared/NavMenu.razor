@@ -1,0 +1,43 @@
+﻿<div class="top-row ps-3 navbar navbar-dark" style="border: none; background-color: rgba(0,0,0,0.0)">
+    <div class="container-fluid">
+        <img src="/images/sunset2.png" width="100%" height="auto">
+        @*<a class="navbar-brand" href="">SunriseBlazor</a>*@
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div style="height: 120px"></div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+                <i class="oi oi-home wete p-2" style="color:whitesmoke" aria-hidden="true"></i><span class=" goldText">Hem</span>
+            </NavLink>
+            <NavLink class="nav-link" href="/Fetch" Match="NavLinkMatch.All">
+                <i class="oi oi-sun wete p-2" style="color:yellow" aria-hidden="true"></i><span class="goldTextHD">Hämta</span>
+            </NavLink>
+            <NavLink class="nav-link " href="/Add" Match="NavLinkMatch.All">
+                <i class="oi oi-plus wete p-2" style="color:green" aria-hidden="true"></i><span class="goldTextLT">Lägg till</span>
+            </NavLink>
+            <NavLink class="nav-link " href="/Remove" Match="NavLinkMatch.All">
+                <i class="oi oi-minus wete p-2" style="color:red" aria-hidden="true"></i><span class="goldTextTB">Radera</span>
+                @*<span class="oi oi-trash wete" aria-hidden="true"></span> Ta bort en plats*@
+            </NavLink>
+
+
+        </div>
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}
